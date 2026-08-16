@@ -1,0 +1,104 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Package Tracker",
+        "description": "Add carrier API credentials and your first tracking number afterwards from this integration's \"Configure\" button."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Package Tracker",
+        "menu_options": {
+          "add_package": "Add a package",
+          "manage_packages": "Manage tracked packages",
+          "carriers": "Carrier API credentials",
+          "settings": "Polling settings"
+        }
+      },
+      "add_package": {
+        "title": "Add a package",
+        "description": "Paste a tracking number. Leave carrier as auto-detect unless it guesses wrong.",
+        "data": {
+          "tracking_number": "Tracking number",
+          "carrier": "Carrier",
+          "name": "Friendly name (optional)"
+        }
+      },
+      "manage_packages": {
+        "title": "Manage tracked packages",
+        "description": "Select any packages to stop tracking and remove.",
+        "data": {
+          "remove_ids": "Packages to remove"
+        }
+      },
+      "carriers": {
+        "title": "Carrier API credentials",
+        "description": "All fields are optional. A carrier with credentials configured here is tried first; any configured fallback aggregators below are then tried in order (17track, then AfterShip, then TrackingMore, then Ship24) for that same package if the native call fails or no native credentials are set. Leave everything blank to rely on the fallback aggregators alone.",
+        "data": {
+          "ups_client_id": "UPS client ID",
+          "ups_client_secret": "UPS client secret",
+          "fedex_client_id": "FedEx client ID",
+          "fedex_client_secret": "FedEx client secret",
+          "dhl_api_key": "DHL API key",
+          "usps_client_id": "USPS client ID",
+          "usps_client_secret": "USPS client secret",
+          "seventeentrack_api_key": "17track API key (fallback 1 of 4)",
+          "aftership_api_key": "AfterShip API key (fallback 2 of 4)",
+          "trackingmore_api_key": "TrackingMore API key (fallback 3 of 4)",
+          "ship24_api_key": "Ship24 API key (fallback 4 of 4)"
+        }
+      },
+      "settings": {
+        "title": "Polling settings",
+        "data": {
+          "poll_interval_minutes": "Poll interval (minutes)",
+          "auto_archive_days": "Stop tracking delivered packages after (days, 0 to disable)"
+        }
+      }
+    },
+    "error": {
+      "required": "Enter a tracking number",
+      "already_tracked": "This tracking number is already being tracked"
+    }
+  },
+  "services": {
+    "add_package": {
+      "name": "Add package",
+      "description": "Start tracking a package by pasting its tracking number.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "The carrier tracking number to watch."
+        },
+        "carrier": {
+          "name": "Carrier",
+          "description": "Carrier to use, or auto to guess from the tracking number's format."
+        },
+        "name": {
+          "name": "Name",
+          "description": "A friendly name for the package's sensor. Defaults to the tracking number."
+        }
+      }
+    },
+    "remove_package": {
+      "name": "Remove package",
+      "description": "Stop tracking a package.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "The tracking number to stop tracking."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Immediately poll all tracked packages instead of waiting for the next scheduled update."
+    }
+  }
+}

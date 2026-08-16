@@ -1,0 +1,62 @@
+blueprint:
+  name: Package Tracker - Notify on Status Change
+  description: >-
+    Sends a notification whenever a package tracked by the Package Tracker
+    custom integration changes status - e.g. "out for delivery" or
+    "delivered." Works with any notify action, including the Home Assistant
+    Companion App on a phone.
+  domain: automation
+  source_url: https://github.com/bouldinnathan/home-assistant-package-tracker/blob/main/blueprints/automation/package_tracker/notify_on_status_change.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: The notify action to call, e.g. notify.mobile_app_your_phone.
+      selector:
+        action: {}
+    statuses:
+      name: Statuses to notify on
+      description: Only these package statuses trigger a notification.
+      default:
+        - out_for_delivery
+        - delivered
+        - delivery_exception
+        - available_for_pickup
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Info received
+              value: info_received
+            - label: In transit
+              value: in_transit
+            - label: Out for delivery
+              value: out_for_delivery
+            - label: Available for pickup
+              value: available_for_pickup
+            - label: Delivered
+              value: delivered
+            - label: Delivery exception
+              value: delivery_exception
+            - label: Returned
+              value: returned
+
+mode: queued
+max_exceeded: silent
+
+trigger:
+  - trigger: event
+    event_type: package_tracker_status_changed
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.event.data.status in statuses }}"
+
+action:
+  - variables:
+      carrier_label: "{{ trigger.event.data.carrier | upper }}"
+      status_label: "{{ trigger.event.data.status | replace('_', ' ') | title }}"
+  - action: !input notify_action
+    data:
+      title: "{{ carrier_label }} - {{ status_label }}"
+      message: >-
+        {{ trigger.event.data.name }}: {{ trigger.event.data.status_detail }}

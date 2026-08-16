@@ -1,0 +1,13 @@
+{
+  "domain": "package_tracker",
+  "name": "Package Tracker",
+  "codeowners": ["@bouldinnathan"],
+  "config_flow": true,
+  "documentation": "https://github.com/bouldinnathan/home-assistant-package-tracker",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/bouldinnathan/home-assistant-package-tracker/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

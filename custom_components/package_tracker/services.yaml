@@ -1,0 +1,30 @@
+add_package:
+  fields:
+    tracking_number:
+      required: true
+      example: "1Z999AA10123456784"
+      selector:
+        text:
+    carrier:
+      required: false
+      selector:
+        select:
+          options:
+            - auto
+            - ups
+            - fedex
+            - dhl
+            - usps
+    name:
+      required: false
+      selector:
+        text:
+
+remove_package:
+  fields:
+    tracking_number:
+      required: true
+      selector:
+        text:
+
+refresh:

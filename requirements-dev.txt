@@ -1,0 +1,5 @@
+pytest
+pytest-asyncio
+ruff
+homeassistant
+pytest-homeassistant-custom-component
