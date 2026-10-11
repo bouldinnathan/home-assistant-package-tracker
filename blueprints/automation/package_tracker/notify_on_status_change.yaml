@@ -10,9 +10,9 @@ blueprint:
   input:
     notify_action:
       name: Notification action
-      description: The notify action to call, e.g. notify.mobile_app_your_phone.
+      description: Enter the notify action name, e.g. notify.mobile_app_your_phone.
       selector:
-        action: {}
+        text: {}
     statuses:
       name: Statuses to notify on
       description: Only these package statuses trigger a notification.
@@ -42,6 +42,9 @@ blueprint:
 
 mode: queued
 max_exceeded: silent
+
+variables:
+  statuses: !input statuses
 
 trigger:
   - trigger: event

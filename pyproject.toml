@@ -1,15 +1,16 @@
 [project]
 name = "homeassistant-package-tracker"
-version = "0.1.0"
+version = "0.1.1"
 description = "Home Assistant custom integration for tracking UPS/FedEx/DHL/USPS packages and notifying on status changes"
 license = { file = "LICENSE" }
-requires-python = ">=3.12,<3.15"
+requires-python = ">=3.13,<3.15"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 120

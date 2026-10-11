@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Package Tracker</title>
+  <g stroke="#17324d" stroke-width="8" stroke-linejoin="round">
+    <path fill="#f6be65" d="m128 24 96 52-96 52-96-52Z"/>
+    <path fill="#df983f" d="m32 76 96 52v104l-96-52Z"/>
+    <path fill="#edac50" d="m128 128 96-52v104l-96 52Z"/>
+  </g>
+  <path fill="none" stroke="#17324d" stroke-width="10" stroke-linejoin="round" d="m80 50 96 52v40"/>
+  <circle cx="192" cy="188" r="44" fill="#087f8c" stroke="#fff" stroke-width="8"/>
+  <path fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" d="m172 188 14 14 26-28"/>
+</svg>

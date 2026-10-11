@@ -125,7 +125,7 @@ class PackageTrackerOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_manage_packages(self, user_input: dict[str, Any] | None = None):
         options = dict(self.config_entry.options)
-        packages = [pkg for pkg in options.get(CONF_PACKAGES, []) if not pkg.get(PKG_ARCHIVED)]
+        packages = options.get(CONF_PACKAGES, [])
 
         if user_input is not None:
             remove_ids = set(user_input.get("remove_ids", []))
@@ -137,7 +137,7 @@ class PackageTrackerOptionsFlow(config_entries.OptionsFlow):
             return self.async_show_form(step_id="manage_packages", data_schema=vol.Schema({}))
 
         choices = {
-            pkg[PKG_ID]: f"{pkg.get(PKG_NAME) or pkg[PKG_TRACKING_NUMBER]} ({pkg[PKG_TRACKING_NUMBER]}, {_CARRIER_CHOICES.get(pkg.get(PKG_CARRIER, CARRIER_AUTO), pkg.get(PKG_CARRIER))})"
+            pkg[PKG_ID]: f"{pkg.get(PKG_NAME) or pkg[PKG_TRACKING_NUMBER]} ({pkg[PKG_TRACKING_NUMBER]}, {_CARRIER_CHOICES.get(pkg.get(PKG_CARRIER, CARRIER_AUTO), pkg.get(PKG_CARRIER))}){' [archived]' if pkg.get(PKG_ARCHIVED) else ''}"
             for pkg in packages
         }
         schema = vol.Schema({vol.Optional("remove_ids", default=[]): cv.multi_select(choices)})

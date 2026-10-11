@@ -7,8 +7,9 @@ logic (which backend gets picked, when an event fires, what gets archived).
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -40,7 +41,7 @@ from custom_components.package_tracker.coordinator import (
     _build_fallback_chain,
     _build_native_backends,
 )
-from custom_components.package_tracker.models import PackageStatus, TrackingResult
+from custom_components.package_tracker.models import PackageStatus, TrackingEvent, TrackingResult
 from custom_components.package_tracker.packages import build_package
 
 
@@ -239,6 +240,73 @@ async def test_prune_delivered_is_a_noop_when_auto_archive_disabled(hass) -> Non
 
     assert archived == []
     assert entry.options[CONF_PACKAGES][0]["archived"] is False
+
+
+async def test_cached_delivery_survives_options_reload_and_outage(hass) -> None:
+    package = build_package("1Z999AA10123456784")
+    entry = _make_entry(packages=[package], auto_archive_days=1)
+    entry.add_to_hass(hass)
+    backend = AsyncMock(source="ups")
+    now = dt_util.utcnow()
+    result = TrackingResult(
+        status=PackageStatus.DELIVERED,
+        status_detail="At your door",
+        source="ups",
+        resolved_carrier=CARRIER_UPS,
+        estimated_delivery=now,
+        events=(TrackingEvent(now, "Delivered", "Front door", PackageStatus.DELIVERED),),
+    )
+    backend.async_track.return_value = result
+    with patch("custom_components.package_tracker.coordinator._build_native_backends", return_value={CARRIER_UPS: backend}):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        since = now - timedelta(days=5)
+        coordinator._delivered_since[package["id"]] = since
+        await coordinator.async_refresh()
+
+        backend.async_track.side_effect = TrackingBackendError("Carrier unavailable")
+        hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_POLL_INTERVAL: 60})
+        await hass.async_block_till_done()
+        reloaded = hass.data[DOMAIN][entry.entry_id]
+        assert reloaded is not coordinator
+        assert reloaded.data[package["id"]].result == result
+        assert reloaded._delivered_since[package["id"]] == since
+        assert await reloaded.async_prune_delivered() == [package["id"]]
+        await hass.async_block_till_done()
+        assert hass.data[DOMAIN][entry.entry_id].data == {}
+
+
+async def test_backend_timeout_tries_next_candidate(hass) -> None:
+    entry = _make_entry(packages=[build_package("1Z999AA10123456784")])
+    entry.add_to_hass(hass)
+    coordinator = PackageTrackerCoordinator(hass, entry)
+
+    async def hang(_number):
+        await asyncio.Event().wait()
+
+    slow = AsyncMock(source="slow")
+    slow.async_track.side_effect = hang
+    working = AsyncMock(source="working")
+    working.async_track.return_value = _result(PackageStatus.IN_TRANSIT)
+    coordinator._fallback_chain = [slow, working]
+    with patch("custom_components.package_tracker.coordinator._BACKEND_TIMEOUT", 0.01):
+        await coordinator.async_refresh()
+    working.async_track.assert_awaited_once()
+    assert next(iter(coordinator.data.values())).result.status == PackageStatus.IN_TRANSIT
+
+
+async def test_backend_carrier_overrides_ambiguous_number_guess(hass) -> None:
+    package = build_package("123456789012")
+    entry = _make_entry(packages=[package])
+    entry.add_to_hass(hass)
+    coordinator = PackageTrackerCoordinator(hass, entry)
+    backend = AsyncMock()
+    backend.async_track.return_value = TrackingResult(
+        status=PackageStatus.IN_TRANSIT, status_detail="", source="fallback", resolved_carrier=CARRIER_DHL
+    )
+    coordinator._fallback_chain = [backend]
+    await coordinator.async_refresh()
+    assert coordinator.data[package["id"]].resolved_carrier == CARRIER_DHL
 
 
 async def test_build_native_backends_requires_complete_credentials(hass) -> None:

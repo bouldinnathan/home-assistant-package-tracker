@@ -1,5 +1,6 @@
 pytest
 pytest-asyncio
 ruff
-homeassistant
-pytest-homeassistant-custom-component
+# The test harness pins Home Assistant; update these versions together.
+homeassistant==2026.10.0
+pytest-homeassistant-custom-component==0.13.371

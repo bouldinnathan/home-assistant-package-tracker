@@ -19,9 +19,10 @@ it deliberately does not happen inside this coordinator's own update cycle.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -60,6 +61,7 @@ from .const import (
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     EVENT_STATUS_CHANGED,
+    NATIVE_CARRIERS,
     PKG_ARCHIVED,
     PKG_CARRIER,
     PKG_ID,
@@ -68,8 +70,10 @@ from .const import (
 )
 from .models import PackageStatus, TrackingResult
 from .packages import resolved_carrier, with_archived_package
+from .storage import TrackingStore
 
 _LOGGER = logging.getLogger(__name__)
+_BACKEND_TIMEOUT = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +96,8 @@ class PackageTrackerCoordinator(DataUpdateCoordinator[dict[str, TrackedPackage]]
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._backends: dict[str, TrackingBackend] = _build_native_backends(hass, entry.options)
         self._fallback_chain: list[TrackingBackend] = _build_fallback_chain(hass, entry.options)
-        self._delivered_since: dict[str, Any] = {}
+        self._delivered_since: dict[str, datetime] = {}
+        self._store = TrackingStore(hass, entry.entry_id)
 
         poll_minutes = entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
         super().__init__(
@@ -102,6 +107,17 @@ class PackageTrackerCoordinator(DataUpdateCoordinator[dict[str, TrackedPackage]]
             update_interval=timedelta(minutes=poll_minutes),
             config_entry=entry,
         )
+
+    async def _async_setup(self) -> None:
+        cached, delivered_since = await self._store.async_load_tracking()
+        self.data = {
+            package[PKG_ID]: _tracked_package(package, cached[package[PKG_ID]])
+            for package in self.config_entry.options.get(CONF_PACKAGES, [])
+            if not package.get(PKG_ARCHIVED) and package[PKG_ID] in cached
+        }
+        self._delivered_since = {
+            package_id: since for package_id, since in delivered_since.items() if package_id in self.data
+        }
 
     async def _async_update_data(self) -> dict[str, TrackedPackage]:
         packages = [pkg for pkg in self.config_entry.options.get(CONF_PACKAGES, []) if not pkg.get(PKG_ARCHIVED)]
@@ -125,18 +141,15 @@ class PackageTrackerCoordinator(DataUpdateCoordinator[dict[str, TrackedPackage]]
             else:
                 result = await self._async_track_one(candidates, tracking_number, carrier, previous.get(package_id))
 
-            tracked = TrackedPackage(
-                id=package_id,
-                tracking_number=tracking_number,
-                name=package.get(PKG_NAME) or tracking_number,
-                carrier=package.get(PKG_CARRIER, CARRIER_AUTO),
-                resolved_carrier=carrier,
-                result=result,
-            )
+            tracked = _tracked_package(package, result)
             results[package_id] = tracked
             self._record_delivered_since(package_id, result.status)
             self._maybe_fire_status_changed(previous.get(package_id), tracked)
 
+        self._delivered_since = {key: value for key, value in self._delivered_since.items() if key in results}
+        await self._store.async_save_tracking(
+            {package_id: tracked.result for package_id, tracked in results.items()}, self._delivered_since
+        )
         return results
 
     async def _async_track_one(
@@ -157,7 +170,10 @@ class PackageTrackerCoordinator(DataUpdateCoordinator[dict[str, TrackedPackage]]
         """
         for backend in candidates:
             try:
-                return await backend.async_track(tracking_number)
+                async with asyncio.timeout(_BACKEND_TIMEOUT):
+                    return await backend.async_track(tracking_number)
+            except TimeoutError:
+                _LOGGER.warning("Tracking request via %s timed out", backend.source)
             except TrackingAuthError as err:
                 _LOGGER.warning("Tracking auth failed for %s via %s: %s", tracking_number, backend.source, err)
             except TrackingBackendError as err:
@@ -222,6 +238,18 @@ class PackageTrackerCoordinator(DataUpdateCoordinator[dict[str, TrackedPackage]]
         self.hass.config_entries.async_update_entry(self.config_entry, options=options)
         _LOGGER.info("Auto-archived %d package(s) delivered over %d day(s) ago", len(to_archive), auto_archive_days)
         return to_archive
+
+
+def _tracked_package(package: dict[str, Any], result: TrackingResult) -> TrackedPackage:
+    """Prefer the backend's carrier identification over an ambiguous format guess."""
+    return TrackedPackage(
+        id=package[PKG_ID],
+        tracking_number=package[PKG_TRACKING_NUMBER],
+        name=package.get(PKG_NAME) or package[PKG_TRACKING_NUMBER],
+        carrier=package.get(PKG_CARRIER, CARRIER_AUTO),
+        resolved_carrier=result.resolved_carrier if result.resolved_carrier in NATIVE_CARRIERS else resolved_carrier(package),
+        result=result,
+    )
 
 
 def _build_native_backends(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, TrackingBackend]:

@@ -8,7 +8,7 @@ from datetime import timedelta
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -26,7 +26,8 @@ from .const import (
     SERVICE_REMOVE_PACKAGE,
 )
 from .coordinator import PackageTrackerCoordinator
-from .packages import build_package, find_package, with_added_package, with_removed_package
+from .packages import build_package, find_package, normalize_tracking_number, with_added_package, with_removed_package
+from .storage import TrackingStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +51,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        # Failed setup does not guarantee async_unload_entry will be called.
+        try:
+            await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        except Exception:
+            _LOGGER.exception("Failed to unload Package Tracker platforms after setup failure")
+        finally:
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+            await coordinator.async_shutdown()
+        raise
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     async def _async_prune(_now) -> None:
@@ -78,6 +90,11 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove cached shipment details when the integration is deleted."""
+    await TrackingStore(hass, entry.entry_id).async_remove()
+
+
 def _get_entry(hass: HomeAssistant) -> ConfigEntry:
     entries = hass.config_entries.async_entries(DOMAIN)
     if not entries:
@@ -91,7 +108,9 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def _add_package(call: ServiceCall) -> None:
         entry = _get_entry(hass)
-        tracking_number = call.data[ATTR_TRACKING_NUMBER]
+        tracking_number = normalize_tracking_number(call.data[ATTR_TRACKING_NUMBER])
+        if not tracking_number:
+            raise ServiceValidationError("Enter a tracking number")
         if find_package(entry.options, tracking_number=tracking_number) is not None:
             raise HomeAssistantError(f"{tracking_number} is already being tracked")
 
@@ -117,7 +136,9 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def _refresh(_call: ServiceCall) -> None:
         entry = _get_entry(hass)
-        coordinator: PackageTrackerCoordinator = hass.data[DOMAIN][entry.entry_id]
+        coordinator: PackageTrackerCoordinator | None = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if coordinator is None:
+            raise HomeAssistantError("Package Tracker is not loaded")
         await coordinator.async_request_refresh()
 
     hass.services.async_register(DOMAIN, SERVICE_ADD_PACKAGE, _add_package, schema=_ADD_PACKAGE_SCHEMA)

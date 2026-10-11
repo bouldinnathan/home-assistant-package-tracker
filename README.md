@@ -38,8 +38,13 @@ free-tier quota (roughly 100 tracking numbers/month as of writing).
 Configuring more than one fallback buys resilience against any single
 aggregator's outage or quota exhaustion, at the cost of registering more
 free accounts. Configuring a carrier's own native API is the most setup (a
-free developer account with that carrier) but keeps that carrier's data off
-third-party services entirely and gives it first crack every poll.
+free developer account with that carrier) and tries that carrier directly
+before any configured third-party fallback on every poll.
+
+Each backend attempt has a 30-second timeout. The last tracking result and
+delivery timer are saved locally, so option changes and Home Assistant
+restarts preserve the last known status during an outage and do not restart
+the auto-archive countdown.
 
 ## Carrier auto-detection honesty note
 
@@ -87,7 +92,9 @@ Copy `custom_components/package_tracker` into your Home Assistant
    the options menu:
    - **Add a package** - paste a tracking number, optionally override the
      carrier and set a friendly name.
-   - **Manage tracked packages** - stop tracking (remove) any package.
+   - **Manage tracked packages** - stop tracking (remove) any package,
+     including archived packages. Remove an archived record here before
+     adding the same tracking number again.
    - **Carrier API credentials** - all optional; fill in whichever native
      carriers you want, and/or any of the four fallback aggregators (tried
      in the order listed below, each assumed unreliable on its own - see
@@ -151,9 +158,12 @@ Every time a package's status changes, this integration fires a
 `carrier`, `previous_status`, `status`, and `status_detail`. Easiest way to
 turn that into a push notification: import the included blueprint
 (`blueprints/automation/package_tracker/notify_on_status_change.yaml`) via
-Settings -> Automations -> Blueprints -> Import Blueprint, point it at any
-`notify` action (e.g. `notify.mobile_app_your_phone` from the Home
+Settings -> Automations -> Blueprints -> Import Blueprint, enter a
+`notify` action name (e.g. `notify.mobile_app_your_phone` from the Home
 Assistant Companion App), and pick which statuses should notify.
+
+If you imported the blueprint before version 0.1.1, re-import it and replace
+the old action-picker value with the notify action name.
 
 Or write your own automation directly against the event:
 
@@ -177,16 +187,37 @@ itself is the status - the event just also carries `previous_status` and
 ## Diagnostics
 
 Settings -> Devices & Services -> Package Tracker -> Download diagnostics
-gives a redacted snapshot (all carrier credentials, tokens, and unique IDs
-stripped) - useful for filing an issue if a carrier's API response shape has
-drifted from what's implemented here.
+gives a redacted snapshot (carrier credentials, tokens, package IDs, tracking
+numbers, and friendly names stripped) - useful for filing an issue if a
+carrier's API response shape has drifted from what's implemented here.
+
+Tracking results are stored under Home Assistant's `.storage` directory and
+removed when the integration is deleted. Removing or archiving a package
+also removes its sensor registration and cached result; Recorder history
+follows Home Assistant's own retention settings.
 
 ## Development
 
 ```bash
-python -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 ruff check .
 pytest
+```
+
+The development requirements pin Home Assistant 2026.10.0 and its matching
+test harness. CI also runs the full suite against the minimum supported
+Home Assistant 2025.1.4 on Python 3.13, and checks imports against the latest
+Home Assistant release on Python 3.14. The test harness and Home Assistant
+must be installed together to avoid silently replacing the version under test.
+
+HACS validation runs in `.github/workflows/hacs.yml`. Keep the bundled
+`custom_components/package_tracker/brand/icon.png`: HACS checks for it,
+and Home Assistant 2026.3+ can display it directly. The editable source is
+`brand/icon.svg`. To regenerate both PNG sizes with `rsvg-convert`:
+
+```bash
+rsvg-convert -w 256 -h 256 -o custom_components/package_tracker/brand/icon.png custom_components/package_tracker/brand/icon.svg
+rsvg-convert -w 512 -h 512 -o custom_components/package_tracker/brand/icon@2x.png custom_components/package_tracker/brand/icon.svg
 ```

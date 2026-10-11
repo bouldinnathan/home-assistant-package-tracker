@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "package_tracker"
 NAME: Final = "Package Tracker"
-VERSION: Final = "0.1.0"
+VERSION: Final = "0.1.1"
 MANUFACTURER: Final = "Package Tracker"
 
 PLATFORMS: Final = ["sensor"]
@@ -101,4 +101,7 @@ DIAGNOSTIC_REDACT: Final = [
     "access_token",
     "authorization",
     "unique_id",
+    PKG_ID,
+    PKG_TRACKING_NUMBER,
+    PKG_NAME,
 ]

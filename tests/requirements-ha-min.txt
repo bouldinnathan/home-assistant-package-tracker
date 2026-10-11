@@ -1,0 +1,8 @@
+pytest
+pytest-asyncio
+ruff
+homeassistant==2025.1.4
+pytest-homeassistant-custom-component==0.13.205
+# Match the DNS dependency from this HA release. Newer pycares starts a
+# shutdown thread that outlives the old test harness's cleanup checks.
+pycares==4.5.0

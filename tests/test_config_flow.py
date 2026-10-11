@@ -16,6 +16,7 @@ from custom_components.package_tracker.const import (
     CONF_PACKAGES,
     CONF_POLL_INTERVAL,
     DOMAIN,
+    PKG_ARCHIVED,
 )
 from custom_components.package_tracker.packages import build_package
 
@@ -114,6 +115,20 @@ async def test_manage_packages_removes_selected_package(hass) -> None:
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PACKAGES] == []
+
+
+async def test_manage_packages_includes_archived_packages(hass) -> None:
+    package = {**build_package("1Z999AA10123456784"), PKG_ARCHIVED: True}
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={CONF_PACKAGES: [package]})
+    result = await _init_options(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "manage_packages"}
+    )
+    assert result["data_schema"]({"remove_ids": [package["id"]]})["remove_ids"] == [package["id"]]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"remove_ids": [package["id"]]}
+    )
     assert result["data"][CONF_PACKAGES] == []
 
 

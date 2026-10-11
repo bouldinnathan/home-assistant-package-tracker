@@ -16,6 +16,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
@@ -27,6 +28,12 @@ from .models import PackageStatus
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up one sensor per currently-tracked package, plus the summary sensor."""
     coordinator: PackageTrackerCoordinator = hass.data[DOMAIN][entry.entry_id]
+    registry = er.async_get(hass)
+    active_unique_ids = {f"{entry.entry_id}_{package_id}" for package_id in coordinator.data}
+    active_unique_ids.add(f"{entry.entry_id}_summary")
+    for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registered.platform == DOMAIN and registered.domain == "sensor" and registered.unique_id not in active_unique_ids:
+            registry.async_remove(registered.entity_id)
     entities: list[SensorEntity] = [PackageSummarySensor(coordinator)]
     entities.extend(PackageSensor(coordinator, package_id) for package_id in coordinator.data)
     async_add_entities(entities)
